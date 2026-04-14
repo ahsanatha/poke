@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  # Go API Service
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      DB_USER: "pokebot_user"
+      DB_PASSWORD: "pokebot_password"
+      DB_HOST: "mysql"
+      DB_PORT: "3306"
+      DB_NAME: "pokebot"
+      GIN_MODE: "debug"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - pokebot-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  # MySQL Database
+  mysql:
+    image: mysql:8.0-alpine
+    container_name: pokebot-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: "root_password"
+      MYSQL_DATABASE: "pokebot"
+      MYSQL_USER: "pokebot_user"
+      MYSQL_PASSWORD: "pokebot_password"
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    networks:
+      - pokebot-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Optional: phpMyAdmin for MySQL management
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: pokebot-phpmyadmin
+    environment:
+      PMA_HOST: "mysql"
+      PMA_USER: "pokebot_user"
+      PMA_PASSWORD: "pokebot_password"
+      PMA_DATABASE: "pokebot"
+    ports:
+      - "8081:80"
+    depends_on:
+      - mysql
+    networks:
+      - pokebot-network
+    restart: unless-stopped
+
+volumes:
+  mysql-data:
+    driver: local
+
+networks:
+  pokebot-network:
+    driver: bridge
