@@ -1,455 +1,261 @@
----
-# PokeBot configuration
-# A Pokemon information chatbot with user registration
-
-version: "4.0"
-
-name: "PokeBot"
-desc: "Pokemon information chatbot with user registration"
-
-# ============================================
-# ENTITIES - For name validation
-# ============================================
-entities:
-  name:
-    desc: "User's name"
-    type: "trait"
-    scope: "conversation"
-    labels:
-      - "name entity"
-      - "user name"
-    
-  pokemon:
-    desc: "Pokemon name"
-    type: "trait"
-    scope: "conversation"
-    labels:
-      - "pokemon name"
-      - "pokemon species"
-
-# ============================================
-# INTENTS - User intentions
-# ============================================
-intents:
-  # Registration flow
-  startIntent:
-    type: "text"
-    initial: true
-    fallback: false
-    condition: 'content === "/start"'
-    labels:
-      - "start conversation"
-      - "begin chat"
-
-  nameProvidesIntent:
-    type: "text"
-    initial: false
-    fallback: false
-    labels:
-      - "user provides name"
-      - "name given"
-    # This will trigger when Supermodel NL detects a name
-
-  yesIntent:
-    type: "text"
-    initial: false
-    fallback: false
-    condition: 'content.toLowerCase() === "yes" || content.toLowerCase() === "y"'
-    labels:
-      - "user confirms"
-      - "yes response"
-
-  pokemonQueryIntent:
-    type: "text"
-    initial: false
-    fallback: false
-    labels:
-      - "user asks pokemon"
-      - "pokemon inquiry"
-    # Triggers when user provides Pokemon name
-
-  anotherPokemonIntent:
-    type: "text"
-    initial: false
-    fallback: false
-    condition: 'content.toLowerCase() === "pokemon information"'
-    labels:
-      - "another pokemon query"
-      - "pokemon request"
-
-  endIntent:
-    type: "text"
-    initial: false
-    fallback: false
-    condition: 'content.toLowerCase() === "no" || content.toLowerCase() === "n"'
-    labels:
-      - "end conversation"
-      - "quit"
-
-  # API Result Handling
-  userRegisteredIntent:
-    type: "command"
-    initial: false
-    fallback: false
-    condition: 'content === "userRegistered"'
-
-  pokemonDataIntent:
-    type: "command"
-    initial: false
-    fallback: false
-    condition: 'content === "pokemonData"'
-
-  errorIntent:
-    type: "command"
-    initial: false
-    fallback: false
-    condition: 'content === "error"'
-
-# ============================================
-# STATES - Conversation flow
-# ============================================
-states:
-  init:
-    transitions:
-      start:
-        condition: 'intent === "startIntent"'
-      registerFlow:
-        condition: 'intent === "startIntent"'
-    initial: true
-
-  start:
-    transitions:
-      askName:
-        condition: 'intent === "startIntent"'
-    action: greeting
-
-  askName:
-    transitions:
-      nameValidate:
-        condition: 'intent === "nameProvidesIntent"'
-      askName:
-        condition: 'true'
-        fallback: true
-    action: askNameAction
-
-  nameValidate:
-    transitions:
-      confirmName:
-        condition: 'true'
-    action: validateNameAction
-
-  confirmName:
-    transitions:
-      registerUser:
-        condition: 'intent === "yesIntent"'
-      askName:
-        condition: 'intent === "endIntent"'
-    action: confirmNameAction
-
-  registerUser:
-    transitions:
-      userRegistered:
-        condition: 'intent === "userRegisteredIntent"'
-      error:
-        condition: 'intent === "errorIntent"'
-    action: registerUserAPI
-
-  userRegistered:
-    transitions:
-      pokemonMenu:
-        condition: 'true'
-    action: welcomeRegistered
-
-  pokemonMenu:
-    transitions:
-      pokemonQuery:
-        condition: 'intent === "pokemonQueryIntent"'
-      end:
-        condition: 'intent === "endIntent"'
-    action: pokemonMenuAction
-
-  pokemonQuery:
-    transitions:
-      queryPokemonAPI:
-        condition: 'true'
-    action: getPokeNameAction
-
-  queryPokemonAPI:
-    transitions:
-      pokemonReceived:
-        condition: 'intent === "pokemonDataIntent"'
-      pokemonError:
-        condition: 'intent === "errorIntent"'
-    action: queryPokemonAction
-
-  pokemonReceived:
-    transitions:
-      pokemonMenu:
-        condition: 'true'
-    action: displayPokemonAction
-
-  pokemonError:
-    transitions:
-      pokemonMenu:
-        condition: 'true'
-    action: pokemonErrorAction
-
-  error:
-    transitions:
-      askName:
-        condition: 'true'
-    action: errorAction
-
-  end:
-    transitions: {}
-    action: endAction
-    end: true
-
-# ============================================
-# ACTIONS - Messages and API calls
-# ============================================
-actions:
-  # Greeting
-  greeting:
-    type: "text"
-    options:
-      text: "👋 Hello! Welcome to PokeBot! I'm here to help you find Pokemon information.\n\nFirst, let me get your name so I can register you."
-
-  # Ask for name
-  askNameAction:
-    type: "text"
-    options:
-      text: "What's your name?"
-
-  # Validate name with Supermodel NL
-  validateNameAction:
-    type: "text"
-    options:
-      text: "So your name is {{content}}?"
-
-  # Confirm name
-  confirmNameAction:
-    type: "text"
-    options:
-      text: "Great! I'll register you as {{content}}. Is that correct?\n\nReply with 'yes' to confirm or say your name again."
-
-  # Register user via API (Async API - doesn't wait for response immediately)
-  registerUserAPI:
-    type: "asyncApi"
-    options:
-      uri: "https://your-api-domain.com/api/v1/register"
-      method: "POST"
-      headers:
-        - key: "Content-Type"
-          value: "application/json"
-      body:
-        - key: "name"
-          value: $(payload.content)
-    command: "userRegistered"
-
-  # Welcome message after registration
-  welcomeRegistered:
-    type: "text"
-    options:
-      text: "✅ Welcome to PokeBot, {{payload.content}}!\n\nYou can send 'Pokemon information' to get started, or type a Pokemon name to learn about them!"
-
-  # Pokemon menu
-  pokemonMenuAction:
-    type: "text"
-    options:
-      text: "🔍 Which Pokemon do you want to learn about?\n\nJust type the Pokemon name (e.g., 'pikachu', 'bulbasaur', 'charmander')"
-
-  # Get Pokemon name from user
-  getPokeNameAction:
-    type: "text"
-    options:
-      text: "Searching for {{content}}..."
-
-  # Query Pokemon API
-  queryPokemonAction:
-    type: "syncApi"
-    options:
-      uri: "https://your-api-domain.com/api/v1/pokemon"
-      method: "POST"
-      headers:
-        - key: "Content-Type"
-          value: "application/json"
-      body:
-        - key: "pokemon"
-          value: $(payload.content)
-
-  # Display Pokemon information
-  displayPokemonAction:
-    type: "carousel"
-    options:
-      items:
-        - title: "{{payload.data.name | capitalize}}"
-          image: "{{payload.data.image}}"
-          subtitle: "Type: {{payload.data.type}}\nHeight: {{payload.data.height}} dm\nWeight: {{payload.data.weight}} hg"
-          buttons:
-            - label: "Learn More"
-              type: "postback"
-              payload: "more_{{payload.data.name}}"
-            - label: "Another Pokemon"
-              type: "postback"
-              payload: "pokemon_information"
-
-  # Error handling for Pokemon query
-  pokemonErrorAction:
-    type: "text"
-    options:
-      text: "❌ Sorry, I couldn't find that Pokemon.\n\nMake sure you spelled it correctly. Try again with another Pokemon name or type 'no' to exit."
-
-  # Error handling for registration
-  errorAction:
-    type: "text"
-    options:
-      text: "⚠️ Something went wrong during registration. Let's try again.\n\nWhat's your name?"
-
-  # End conversation
-  endAction:
-    type: "text"
-    options:
-      text: "👋 Thanks for using PokeBot! Come back anytime to learn more about Pokemon.\n\nType /start to begin again."
-
-# ============================================
-# FLOW MAPPING - How intents connect to states
-# ============================================
-flow:
-  init:
-    intents:
-      - startIntent
-    transitions:
-      start:
-        condition: 'intent === "startIntent"'
-
-  start:
-    intents:
-      - startIntent
-    transitions:
-      askName:
-        condition: 'true'
-
-  askName:
-    intents:
-      - nameProvidesIntent
-      - startIntent
-    transitions:
-      nameValidate:
-        condition: 'intent === "nameProvidesIntent"'
-      askName:
-        condition: 'true'
-        fallback: true
-
-  nameValidate:
-    intents:
-      - startIntent
-    transitions:
-      confirmName:
-        condition: 'true'
-
-  confirmName:
-    intents:
-      - yesIntent
-      - endIntent
-    transitions:
-      registerUser:
-        condition: 'intent === "yesIntent"'
-      askName:
-        condition: 'intent === "endIntent"'
-
-  registerUser:
-    intents:
-      - userRegisteredIntent
-      - errorIntent
-    transitions:
-      userRegistered:
-        condition: 'intent === "userRegisteredIntent"'
-      error:
-        condition: 'intent === "errorIntent"'
-
-  userRegistered:
-    intents:
-      - startIntent
-    transitions:
-      pokemonMenu:
-        condition: 'true'
-
-  pokemonMenu:
-    intents:
-      - pokemonQueryIntent
-      - anotherPokemonIntent
-      - endIntent
-      - nameProvidesIntent
-    transitions:
-      pokemonQuery:
-        condition: 'intent === "pokemonQueryIntent" || intent === "anotherPokemonIntent" || intent === "nameProvidesIntent"'
-      end:
-        condition: 'intent === "endIntent"'
-
-  pokemonQuery:
-    intents:
-      - pokemonQueryIntent
-      - nameProvidesIntent
-    transitions:
-      queryPokemonAPI:
-        condition: 'true'
-
-  queryPokemonAPI:
-    intents:
-      - pokemonDataIntent
-      - errorIntent
-      - startIntent
-    transitions:
-      pokemonReceived:
-        condition: 'intent === "pokemonDataIntent"'
-      pokemonError:
-        condition: 'intent === "errorIntent"'
-      start:
-        condition: 'intent === "startIntent"'
-
-  pokemonReceived:
-    intents:
-      - startIntent
-      - anotherPokemonIntent
-      - pokemonQueryIntent
-    transitions:
-      pokemonMenu:
-        condition: 'true'
-
-  pokemonError:
-    intents:
-      - pokemonQueryIntent
-      - nameProvidesIntent
-      - endIntent
-      - startIntent
-    transitions:
-      pokemonMenu:
-        condition: 'intent === "pokemonQueryIntent" || intent === "nameProvidesIntent"'
-      end:
-        condition: 'intent === "endIntent"'
-      start:
-        condition: 'intent === "startIntent"'
-
-  error:
-    intents:
-      - startIntent
-    transitions:
-      askName:
-        condition: 'true'
-
-  end:
-    intents:
-      - startIntent
-    transitions:
-      start:
-        condition: 'intent === "startIntent"'
-
-# ============================================
-# NLU CONFIGURATION - Supermodel NL
-# ============================================
-nlu:
-  config:
-    version: "1.0"
-    model: "supermodel"
-    threshold: 0.7
+name: pikatsu
+tag: null
+deleted_at: null
+desc: ''
+timezone: 7
+flows:
+    greetings:
+        active: true
+        volatile: true
+        intents:
+            greet:
+                type: command
+                initial: true
+                fallback: false
+                condition: content == "greet"
+            intial_greet:
+                type: text
+                initial: true
+                fallback: false
+                classifier:
+                    nlu: greeting
+                    match: hello
+            startTelegram:
+                type: text
+                initial: true
+                fallback: false
+                condition: content == "/start"
+            confirmIntent:
+                type: text
+                initial: false
+                fallback: false
+                classifier:
+                    nlu: yesno
+                    match: confirm
+            denyIntent:
+                type: text
+                initial: false
+                fallback: false
+                classifier:
+                    nlu: yesno
+                    match: deny
+        states:
+            gotName:
+                transitions:
+                    confirmName:
+                        fallback: false
+                        condition: intent == "confirmIntent"
+                    wrongName:
+                        condition: intent == "denyIntent"
+                action: confirmName
+                enter:
+                    context.name: content
+                initial: false
+            askName:
+                transitions:
+                    gotName:
+                        mapping:
+                            context.name: content
+                        condition: content != "/start"
+                action:
+                    -
+                        name: askName
+                initial: false
+                end: false
+            confirmName:
+                transitions: {}
+                action:
+                    -
+                        name: closeGreeting
+                    -
+                        name: saveUserInfo
+                end: true
+            init:
+                transitions:
+                    askName:
+                        fallback: true
+                initial: true
+            wrongName:
+                transitions:
+                    gotName:
+                        fallback: true
+                        mapping:
+                            context.name: content
+                action: reAskName
+        actions:
+            sayHi:
+                type: text
+                options:
+                    text: Hello what's your name?
+            confirmName:
+                type: text
+                options:
+                    text: So your name is $(context.name)?
+            askName:
+                type: text
+                options:
+                    text: Hello what's your name?
+            confirming:
+                type: text
+                options:
+                    text: asdasda
+            closeGreeting:
+                type: text
+                options:
+                    text: 'Welcome to PikaBiasaBot, $(context.name)! You can send "Pokemon Information" to get information about a Pokemon'
+            reaskName:
+                type: text
+                options:
+                    text: 'Sorry, so what''s your name?'
+            saveUserInfo:
+                type: api
+                options:
+                    uri: 'https://hc4k4ccck4kwskc00gw44ggk.triki.cloud/api/v1/register'
+                    method: POST
+                    body:
+                        name: $(context.name)
+            explainPokeInfo:
+                type: text
+                options:
+                    text: 'You can get pokemon information by typing "pokemon information" or "poke info" :)'
+            reAskName:
+                type: text
+                options:
+                    text: 'i''m sorry, what''s you name again?'
+        methods: {}
+    pokeInfo:
+        active: true
+        volatile: true
+        intents:
+            pokeInfo:
+                type: text
+                initial: true
+                fallback: false
+                classifier:
+                    nlu: askPokemon
+                    match: pokemon
+            pokeName:
+                type: text
+                initial: false
+                fallback: false
+            catchPokeCommand:
+                type: command
+                initial: false
+                fallback: false
+                condition: content == "pokeInfo"
+        states:
+            init:
+                transitions:
+                    askPoke:
+                        fallback: true
+                initial: true
+            getPokeInfo:
+                transitions: {}
+                action:
+                    -
+                        name: callPokeAPI
+                    -
+                        name: explainPokemon
+                        condition: result.success
+                    -
+                        name: pokeImage
+                        condition: result.success
+                    -
+                        name: pokeLost
+                        condition: result.success == false
+                end: true
+            askPoke:
+                transitions:
+                    getPokeInfo:
+                        fallback: true
+                        mapping:
+                            context.pokeName: content
+                action:
+                    -
+                        name: askPokemon
+        actions:
+            askPokemon:
+                type: text
+                options:
+                    text: Which Pokemon do you need the info for?
+            callPokeAPI:
+                type: api
+                options:
+                    uri: 'https://hc4k4ccck4kwskc00gw44ggk.triki.cloud/api/v1/pokemon'
+                    method: POST
+                    body:
+                        pokemon: $(context.pokeName)
+            explainPokemon:
+                type: text
+                options:
+                    text: >-
+                        $(result.data.name) is an <$(result.data.type)> Pokemon with $(result.data.weight) weight and $(result.data.height) height,
+                        here's a picture of $(result.data.name).
+            pokeImage:
+                type: template
+                options:
+                    type: image
+                    items:
+                        originalContentUrl: $(result.data.image)
+                        previewImageUrl: $(result.data.image)
+            pokeLost:
+                type: text
+                options:
+                    text: sorry we don't have information for <$(context.pokeName)>
+        methods: {}
+    fallback:
+        active: true
+        volatile: true
+        intents:
+            fallbackIntent:
+                type: text
+                initial: true
+                fallback: true
+        states:
+            init:
+                transitions:
+                    init:
+                        fallback: true
+                action: fallback
+                initial: true
+                end: true
+        actions:
+            fallback:
+                type: text
+                options:
+                    text: i cannot understand you yet. Please type "poke info" to get information about a pokemon
+        methods: {}
+nlus:
+    yesno:
+        type: keyword
+        options:
+            keywords:
+                confirm:
+                    - ya
+                    - iya
+                    - 'yes'
+                deny:
+                    - 'no'
+                    - gak
+                    - nah
+                    - tidak
+            default: confirm
+    askPokemon:
+        type: keyword
+        options:
+            keywords:
+                pokemon:
+                    - pokmeon information
+                    - information
+                    - poke info
+    greeting:
+        type: keyword
+        options:
+            keywords:
+                hello:
+                    - hai
+                    - hi
+                    - hello
+                    - ola
+methods: {}
+config: {}
